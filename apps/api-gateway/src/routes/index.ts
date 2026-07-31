@@ -18,5 +18,6 @@ router.use('/trains', proxy(config.services.train));
 router.use('/bookings', bookingRateLimiter, proxy(config.services.booking));
 router.use('/seats', proxy(config.services.seat));
 router.use('/payments', proxy(config.services.payment));
+router.use('/tracking', proxy(config.services.tracking));
 
 export default router;

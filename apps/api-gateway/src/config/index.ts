@@ -12,6 +12,7 @@ export const config = {
     booking: process.env.BOOKING_SERVICE_URL || 'http://localhost:4005',
     seat: process.env.SEAT_SERVICE_URL || 'http://localhost:4006',
     payment: process.env.PAYMENT_SERVICE_URL || 'http://localhost:4007',
-    notification: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4008',
+    tracking: process.env.TRACKING_SERVICE_URL || 'http://localhost:4008',
+    notification: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4009',
   },
 };
