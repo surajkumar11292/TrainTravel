@@ -24,10 +24,10 @@ export const searchTrainSchema = z.object({
 });
 
 export const holdSeatsSchema = z.object({
-  trainId: z.string().uuid(),
+  trainId: z.string(),
   journeyDate: z.string(),
   coachClass: z.nativeEnum(CoachType),
-  seatIds: z.array(z.string().uuid()).min(1, 'Select at least one seat').max(6, 'Max 6 seats per booking'),
+  seatIds: z.array(z.string()).min(1, 'Select at least one seat').max(6, 'Max 6 seats per booking'),
   quota: z.nativeEnum(Quota).default(Quota.GENERAL),
 });
 
@@ -42,11 +42,11 @@ export const passengerSchema = z.object({
 export const createBookingSchema = z.object({
   holdToken: z.string(),
   passengers: z.array(passengerSchema).min(1).max(6),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: z.string(),
 });
 
 export const initiatePaymentSchema = z.object({
-  bookingId: z.string().uuid(),
+  bookingId: z.string(),
   paymentMethod: z.nativeEnum(PaymentMethod),
   idempotencyKey: z.string(),
 });
