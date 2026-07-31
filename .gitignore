@@ -1,0 +1,21 @@
+node_modules
+.turbo
+dist
+build
+coverage
+*.log
+.env
+.env.local
+
+# AI & Agent artifacts
+.agents/
+.claude/
+.gemini/
+graphify-out/
+graphify*
+skills-lock.json
+CLAUDE.md
+
+# System files
+.DS_Store
+Thumbs.db

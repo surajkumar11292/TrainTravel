@@ -1,0 +1,23 @@
+{
+  "name": "traintravel-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.1.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "db:generate": "pnpm --filter @traintravel/database db:generate",
+    "db:migrate": "pnpm --filter @traintravel/database db:migrate",
+    "db:seed": "pnpm --filter @traintravel/database db:seed",
+    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f docker/docker-compose.yml down",
+    "docker:logs": "docker-compose -f docker/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
