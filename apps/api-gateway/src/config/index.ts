@@ -4,6 +4,7 @@ dotenv.config();
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET || 'super_secret_access_key_traintravel_2026_production',
+  recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY || '',
   services: {
     auth: process.env.AUTH_SERVICE_URL || 'http://localhost:4001',
     user: process.env.USER_SERVICE_URL || 'http://localhost:4002',

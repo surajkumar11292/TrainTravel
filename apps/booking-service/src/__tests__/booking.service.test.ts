@@ -9,8 +9,14 @@ describe('Booking Service API', () => {
     expect(res.body.service).toBe('booking-service');
   });
 
-  it('should reject invalid booking creation requests', async () => {
-    const res = await request(app).post('/bookings').send({});
+  it('should reject booking initiation with invalid hold token', async () => {
+    const res = await request(app).post('/bookings').send({
+      userId: 'user_123',
+      holdToken: 'invalid_token',
+      passengers: [{ name: 'John Doe', age: 30, gender: 'MALE' }],
+      idempotencyKey: 'idemp_123',
+    });
+
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });

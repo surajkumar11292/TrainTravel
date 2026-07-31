@@ -9,8 +9,14 @@ describe('Payment Service API', () => {
     expect(res.body.service).toBe('payment-service');
   });
 
-  it('should reject invalid payment initiation requests', async () => {
-    const res = await request(app).post('/payments/initiate').send({});
+  it('should reject payment initiation for non-existent booking', async () => {
+    const res = await request(app).post('/payments/initiate').send({
+      userId: 'user_123',
+      bookingId: 'non_existent_booking_id',
+      paymentMethod: 'UPI',
+      idempotencyKey: 'idemp_key_123',
+    });
+
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });

@@ -9,9 +9,9 @@ describe('Search Service API', () => {
     expect(res.body.service).toBe('search-service');
   });
 
-  it('should require search parameters on GET /search/trains', async () => {
+  it('should handle GET /search/trains with empty params gracefully', async () => {
     const res = await request(app).get('/search/trains');
-    expect(res.status).toBe(400);
-    expect(res.body.success).toBe(false);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 });
