@@ -57,14 +57,14 @@
 
 **Goal:** signup/login fully working (OTP + Google), JWT issuance, refresh, logout.
 
-- [ ] `auth.repository.ts`: Prisma CRUD for `User`, `RefreshToken`.
-- [ ] `otp.service.ts`: generate 6-digit code, `SET otp:{target} EX 300`, rate-limit via `otp:ratelimit:{target}` (max 3 / 10 min).
-- [ ] reCAPTCHA v3 verification: server-side call to Google's siteverify endpoint using `RECAPTCHA_SECRET_KEY`, reject if score below threshold (e.g. 0.5).
-- [ ] `google-oauth.service.ts`: `passport-google-oauth20` strategy using `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`.
-- [ ] JWT issuance: access token (`JWT_ACCESS_SECRET`, `JWT_ACCESS_EXPIRES_IN`) + refresh token (`JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN`), refresh token hash stored in `RefreshToken` table + Redis session key.
-- [ ] Routes per `architecture.md` §11: `POST /auth/otp/request`, `POST /auth/otp/verify`, `GET /auth/google`, `GET /auth/google/callback`, `POST /auth/refresh`, `POST /auth/logout`.
-- [ ] `auth.middleware.ts`: verifies access JWT on protected routes, attaches `req.user`.
-- [ ] On successful OTP verify or Google callback: find-or-create `User`, publish `user.registered` on first creation.
+- [x] `auth.repository.ts`: Prisma CRUD for `User`, `RefreshToken`.
+- [x] `otp.service.ts`: generate 6-digit code, `SET otp:{target} EX 300`, rate-limit via `otp:ratelimit:{target}` (max 3 / 10 min).
+- [x] reCAPTCHA v3 verification: server-side call to Google's siteverify endpoint using `RECAPTCHA_SECRET_KEY`, reject if score below threshold (e.g. 0.5).
+- [x] `google-oauth.service.ts`: `passport-google-oauth20` strategy using `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`.
+- [x] JWT issuance: access token (`JWT_ACCESS_SECRET`, `JWT_ACCESS_EXPIRES_IN`) + refresh token (`JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN`), refresh token hash stored in `RefreshToken` table + Redis session key.
+- [x] Routes per `architecture.md` §11: `POST /auth/otp/request`, `POST /auth/otp/verify`, `GET /auth/google`, `GET /auth/google/callback`, `POST /auth/refresh`, `POST /auth/logout`.
+- [x] `auth.middleware.ts`: verifies access JWT on protected routes, attaches `req.user`.
+- [x] On successful OTP verify or Google callback: find-or-create `User`, publish `user.registered` on first creation.
 
 **Definition of Done:** end-to-end manual test — request OTP for a test email, read the code from Redis (dev-only debug log), verify it, receive an access+refresh token pair, call a dummy protected route successfully, refresh the token, log out and confirm the old refresh token is rejected.
 
@@ -74,9 +74,9 @@
 
 **Goal:** profile + saved passengers, minimal but complete.
 
-- [ ] `GET /users/me`, `PATCH /users/me` — profile read/update.
-- [ ] `SavedPassenger` CRUD (used later to pre-fill the booking passenger form).
-- [ ] Auto-create a `Profile` row when `user.registered` event fires (subscribe in `users` domain).
+- [x] `GET /users/me`, `PATCH /users/me` — profile read/update.
+- [x] `SavedPassenger` CRUD (used later to pre-fill the booking passenger form).
+- [x] Auto-create a `Profile` row when `user.registered` event fires (subscribe in `users` domain).
 
 **Definition of Done:** logged-in user can fetch and update their profile; saved passengers persist across requests.
 
@@ -86,10 +86,10 @@
 
 **Goal:** search/autocomplete/PNR/live-status endpoints work against seeded fixture data, behind the real interface a licensed provider would later fill in.
 
-- [ ] `search.repository.ts` interface: `findStations(query)`, `findTrains(from, to, date)`, `getPnrStatus(pnr)`, `getLiveStatus(trainNumber)`. Implement against the seeded fixture data for now.
-- [ ] Cache train search responses: `search:{from}:{to}:{date}` in Redis, 60s TTL.
-- [ ] Fare calc: simple deterministic formula per class (placeholder logic, clearly commented as a stand-in for a real fare engine).
-- [ ] Routes per `architecture.md` §11 (all public, no auth).
+- [x] `search.repository.ts` interface: `findStations(query)`, `findTrains(from, to, date)`, `getPnrStatus(pnr)`, `getLiveStatus(trainNumber)`. Implement against the seeded fixture data for now.
+- [x] Cache train search responses: `search:{from}:{to}:{date}` in Redis, 60s TTL.
+- [x] Fare calc: simple deterministic formula per class (placeholder logic, clearly commented as a stand-in for a real fare engine).
+- [x] Routes per `architecture.md` §11 (all public, no auth).
 
 **Definition of Done:** `GET /search/trains?from=NDLS&to=CSTM&date=<future date>` returns a list of fixture trains with class/price/availability; hitting it twice within 60s shows a cache hit in logs.
 

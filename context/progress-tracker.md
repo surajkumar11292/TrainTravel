@@ -14,11 +14,11 @@
 
 | | |
 |---|---|
-| **Current phase** | Phase 3 — Auth domain |
+| **Current phase** | Phase 6 — Booking domain |
 | **Last updated** | 2026-08-04 |
 | **Blockers** | None |
 | **Docs in place** | `TrainTravel-Project-Prompt.md`, `architecture.md`, `build-plan.md`, `code-standards.md`, `library-docs.md`, `progress-tracker.md` |
-| **Repo state** | Phase 2 complete (Redis client, typed EventBus, AppError, error middleware, rate limiter) |
+| **Repo state** | Phase 5 complete (Station autocomplete, train search with 60s Redis caching, fare calculation, PNR & live status lookups) |
 
 ---
 
@@ -31,9 +31,9 @@ Status values: `☐ Not started` · `🔄 In progress` · `⚠️ Blocked` · `�
 | 0 | Repo & tooling scaffold | ✅ Done | Yes |
 | 1 | Database layer | ✅ Done | Yes |
 | 2 | Redis & event bus plumbing | ✅ Done | Yes |
-| 3 | Auth domain | ☐ Not started | — |
-| 4 | Users domain | ☐ Not started | — |
-| 5 | Search domain (fixture-backed) | ☐ Not started | — |
+| 3 | Auth domain | ✅ Done | Yes |
+| 4 | Users domain | ✅ Done | Yes |
+| 5 | Search domain (fixture-backed) | ✅ Done | Yes |
 | 6 | Booking domain | ☐ Not started | — |
 | 7 | Payment domain | ☐ Not started | — |
 | 8 | Notification domain | ☐ Not started | — |
@@ -71,25 +71,25 @@ Status values: `☐ Not started` · `🔄 In progress` · `⚠️ Blocked` · `�
 - [x] `error.middleware.ts` + `AppError`
 
 ### Phase 3 — Auth domain
-- [ ] `auth.repository.ts`
-- [ ] `otp.service.ts` (generate, rate-limit)
-- [ ] reCAPTCHA v3 server verification
-- [ ] Google OAuth strategy
-- [ ] JWT issuance/refresh/revoke
-- [ ] Routes wired
-- [ ] `auth.middleware.ts`
-- [ ] `user.registered` event on first login
+- [x] `auth.repository.ts`
+- [x] `otp.service.ts` (generate, rate-limit)
+- [x] reCAPTCHA v3 server verification
+- [x] Google OAuth strategy
+- [x] JWT issuance/refresh/revoke
+- [x] Routes wired
+- [x] `auth.middleware.ts`
+- [x] `user.registered` event on first login
 
 ### Phase 4 — Users domain
-- [ ] `GET/PATCH /users/me`
-- [ ] `SavedPassenger` CRUD
-- [ ] Auto-create profile on `user.registered`
+- [x] `GET/PATCH /users/me`
+- [x] `SavedPassenger` CRUD
+- [x] Auto-create profile on `user.registered`
 
 ### Phase 5 — Search domain
-- [ ] `search.repository.ts` interface + fixture implementation
-- [ ] Search result Redis caching (60s TTL)
-- [ ] Fare calc placeholder
-- [ ] Routes wired
+- [x] `search.repository.ts` interface + fixture implementation
+- [x] Search result Redis caching (60s TTL)
+- [x] Fare calc placeholder
+- [x] Routes wired
 
 ### Phase 6 — Booking domain
 - [ ] `POST /booking/hold` (seat lock)
@@ -196,6 +196,32 @@ Status values: `☐ Not started` · `🔄 In progress` · `⚠️ Blocked` · `�
 - Blockers encountered: None.
 - Decisions made: `multiSchema` preview feature enabled in Prisma schema for domain separation.
 - Next session should start: Phase 2 (Redis & event bus plumbing).
+
+### 2026-08-04 — Phase 2: Redis & event bus plumbing
+- What was done: Built `shared/redis/client.ts`, `shared/events/types.ts` & `bus.ts` (typed Pub/Sub), `AppError.ts`, `error.middleware.ts`, `rateLimit.middleware.ts`.
+- Definition of Done check: pass (`npm run build:api` compiles cleanly).
+- Blockers encountered: None.
+- Next session should start: Phase 3 (Auth domain).
+
+### 2026-08-04 — Phase 3: Auth domain
+- What was done: Implemented 4-layer Auth domain (`auth.repository.ts`, `otp.service.ts`, `recaptcha.service.ts`, `jwt.service.ts`, `auth.service.ts`, `google-oauth.service.ts`, `auth.controller.ts`, `auth.routes.ts`, `auth.middleware.ts`), wired cookie-parser & passport in `main.ts`, published `otp.requested` & `user.registered` events.
+- Definition of Done check: pass (`npm run build:api` compiles cleanly with 0 errors).
+- Blockers encountered: None.
+- Decisions made: Refresh tokens hashed with SHA-256 before saving to DB and stored in httpOnly `refreshToken` cookie.
+- Next session should start: Phase 4 (Users domain).
+
+### 2026-08-04 — Phase 4: Users domain
+- What was done: Implemented Users domain (`users.repository.ts`, `users.service.ts`, `users.controller.ts`, `users.routes.ts`, `users.events.ts`), wired profile read/update (`GET/PATCH /users/me`), saved passengers CRUD (`GET/POST/DELETE /users/passengers`), and auto-create profile subscriber on `user.registered`.
+- Definition of Done check: pass (`npm run build:api` compiles cleanly with 0 errors).
+- Blockers encountered: None.
+- Next session should start: Phase 5 (Search domain - fixture-backed).
+
+### 2026-08-04 — Phase 5: Search domain (fixture-backed)
+- What was done: Implemented Search domain (`search.repository.ts`, `search.service.ts`, `search.controller.ts`, `search.routes.ts`), added station autocomplete, train search between stations with 60s Redis caching (`search:{from}:{to}:{date}`), class-based fare calculation (`SL`, `3A`, `2A`, `1A`), PNR status lookup, and live train status lookup.
+- Definition of Done check: pass (`npm run build:api` compiles cleanly with 0 errors).
+- Blockers encountered: None.
+- Decisions made: Search results cached in Redis for 60 seconds using key pattern `search:{from}:{to}:{date}`.
+- Next session should start: Phase 6 (Booking domain).
 
 ---
 
