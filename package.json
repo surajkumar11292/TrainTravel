@@ -1,23 +1,15 @@
 {
-  "name": "traintravel-monorepo",
+  "name": "traintravel",
+  "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@9.1.0",
+  "description": "TrainTravel - Indian train ticket booking web application modular monolith",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
-    "db:generate": "pnpm --filter @traintravel/database db:generate",
-    "db:migrate": "pnpm --filter @traintravel/database db:migrate",
-    "db:seed": "pnpm --filter @traintravel/database db:seed",
-    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
-    "docker:down": "docker-compose -f docker/docker-compose.yml down",
-    "docker:logs": "docker-compose -f docker/docker-compose.yml logs -f"
-  },
-  "devDependencies": {
-    "@types/node": "^20.12.12",
-    "turbo": "^2.0.0",
-    "typescript": "^5.4.5"
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:web": "npm run build --workspace=apps/web"
   }
 }

@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-brand-600: #4338ca;
+  --color-accent-500: #f59e0b;
+  --color-status-confirmed: #16a34a;
+  --color-status-rac: #d97706;
+  --color-status-waitlist: #dc2626;
+  --color-bg-page: #f9fafb;
+  --color-bg-surface: #ffffff;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --radius-card: 16px;
+  --shadow-card: 0 2px 8px rgba(17,24,39,0.06);
+}
+
+body {
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}

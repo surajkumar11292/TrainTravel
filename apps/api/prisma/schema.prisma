@@ -1,0 +1,148 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth", "users", "search", "booking", "payment", "notification"]
+}
+
+// ── auth schema ──────────────────────────────────
+model User {
+  id            String   @id @default(uuid())
+  email         String?  @unique
+  phone         String?  @unique
+  googleId      String?  @unique
+  emailVerified Boolean  @default(false)
+  phoneVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@schema("auth")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@schema("auth")
+}
+
+// ── users schema ─────────────────────────────────
+model Profile {
+  userId       String  @id
+  fullName     String?
+  defaultEmail String?
+  defaultPhone String?
+
+  @@schema("users")
+}
+
+model SavedPassenger {
+  id        String  @id @default(uuid())
+  userId    String
+  name      String
+  age       Int
+  gender    String
+  berthPref String?
+
+  @@schema("users")
+}
+
+// ── search schema (reference/cache data) ─────────
+model Station {
+  code String @id
+  name String
+  city String
+
+  @@schema("search")
+}
+
+model Train {
+  number String   @id
+  name   String
+  runsOn String[] // ['MON','TUE',...]
+
+  @@schema("search")
+}
+
+// ── booking schema ────────────────────────────────
+model Booking {
+  id           String   @id @default(uuid())
+  userId       String
+  trainNumber  String
+  fromStation  String
+  toStation    String
+  journeyDate  DateTime
+  travelClass  String
+  quota        String
+  pnr          String?  @unique
+  status       String   // HOLD | PENDING_PAYMENT | CONFIRMED | RAC | WAITLISTED | CANCELLED | EXPIRED
+  fareTotal    Decimal
+  contactEmail String
+  contactPhone String
+  createdAt    DateTime @default(now())
+
+  @@schema("booking")
+}
+
+model Passenger {
+  id        String  @id @default(uuid())
+  bookingId String
+  name      String
+  age       Int
+  gender    String
+  berthPref String?
+
+  @@schema("booking")
+}
+
+model BookingStatusHistory {
+  id        String   @id @default(uuid())
+  bookingId String
+  status    String
+  note      String?
+  at        DateTime @default(now())
+
+  @@schema("booking")
+}
+
+// ── payment schema ────────────────────────────────
+model Payment {
+  id                String   @id @default(uuid())
+  bookingId         String   @unique
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?
+  amount            Decimal
+  status            String   // CREATED | CAPTURED | FAILED | REFUNDED
+  createdAt         DateTime @default(now())
+
+  @@schema("payment")
+}
+
+model Refund {
+  id        String   @id @default(uuid())
+  paymentId String
+  amount    Decimal
+  status    String   // INITIATED | PROCESSED | FAILED
+  createdAt DateTime @default(now())
+
+  @@schema("payment")
+}
+
+// ── notification schema ───────────────────────────
+model MessageLog {
+  id       String   @id @default(uuid())
+  channel  String   // SMS | EMAIL
+  toAddr   String
+  template String
+  status   String   // SENT | FAILED
+  sentAt   DateTime @default(now())
+
+  @@schema("notification")
+}
