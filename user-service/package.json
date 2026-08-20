@@ -28,6 +28,7 @@
     "kafkajs": "^2.2.4",
     "otp-generator": "^4.0.1",
     "pg": "^8.17.1",
+    "traintravel-platform": "file:..",
     "winston": "^3.19.0"
   },
   "devDependencies": {

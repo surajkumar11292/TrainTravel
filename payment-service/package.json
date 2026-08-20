@@ -22,6 +22,7 @@
     "kafkajs": "^2.2.4",
     "pg": "^8.19.0",
     "razorpay": "^2.9.5",
+    "traintravel-platform": "file:..",
     "winston": "^3.19.0"
   },
   "devDependencies": {

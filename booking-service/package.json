@@ -23,6 +23,7 @@
     "ioredis": "^5.9.2",
     "kafkajs": "^2.2.4",
     "pg": "^8.19.0",
+    "traintravel-platform": "file:..",
     "winston": "^3.19.0"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@
   "description": "TrainTravel Enterprise Microservices Railway Booking Platform",
   "private": true,
   "scripts": {
+    "dev": "concurrently -n gateway,user,search,admin,inventory,booking,payment,notif,web -c cyan,blue,yellow,magenta,green,red,gray,white,bgBlue \"npm run dev:gateway\" \"npm run dev:user\" \"npm run dev:search\" \"npm run dev:admin\" \"npm run dev:inventory\" \"npm run dev:booking\" \"npm run dev:payment\" \"npm run dev:notification\" \"npm run dev:frontend\"",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "install:all": "npm install --prefix shared && npm install --prefix api-gateway && npm install --prefix user-service && npm install --prefix search-service && npm install --prefix admin-service && npm install --prefix inventory-service && npm install --prefix booking-service && npm install --prefix payment-service && npm install --prefix notification-service && npm install --prefix frontend",
@@ -20,6 +21,6 @@
     "dev:frontend": "npm run dev --prefix frontend"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.2.4"
   }
 }
