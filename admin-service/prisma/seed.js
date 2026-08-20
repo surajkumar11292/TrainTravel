@@ -21,12 +21,14 @@ const STATIONS = [
 
 const SEAT_TYPES = ['LOWER', 'MIDDLE', 'UPPER', 'SIDE_LOWER', 'SIDE_UPPER'];
 
+const formatDate = (d) => d.toISOString().split('T')[0];
+
 async function seed() {
-  console.log('🌱 Starting TrainTravel Database Seeding...');
-  await connectProducer().catch(e => console.warn('Kafka producer connect warning (will still seed DB):', e.message));
+  console.log('🌱 Starting TrainTravel Full Seeding & Kafka Synchronization...');
+  await connectProducer().catch((e) => console.warn('Kafka producer warning:', e.message));
 
   // 1. Seed Stations
-  console.log('📍 Seeding Stations...');
+  console.log('📍 1. Seeding Stations...');
   const createdStations = {};
   for (const st of STATIONS) {
     const station = await prisma.station.upsert({
@@ -43,14 +45,13 @@ async function seed() {
   }
   console.log(`✅ Seeded ${Object.keys(createdStations).length} stations.`);
 
-  // 2. Seed Trains
-  console.log('🚆 Seeding Trains & Routes...');
+  // 2. Define Trains and their Route Stops
   const TRAINS = [
     {
       trainNumber: '12301',
       trainName: 'Rajdhani Express',
       coachName: 'AC 3 Tier',
-      totalSeats: 20,
+      totalSeats: 30,
       basePrice: 1650,
       route: [
         { code: 'NDLS', seq: 1, arr: null, dep: '16:55', dist: 0 },
@@ -63,7 +64,7 @@ async function seed() {
       trainNumber: '12952',
       trainName: 'Mumbai Rajdhani',
       coachName: 'AC 2 Tier',
-      totalSeats: 20,
+      totalSeats: 30,
       basePrice: 1950,
       route: [
         { code: 'NDLS', seq: 1, arr: null, dep: '16:55', dist: 0 },
@@ -75,7 +76,7 @@ async function seed() {
       trainNumber: '22692',
       trainName: 'Bengaluru Rajdhani',
       coachName: 'AC 3 Tier',
-      totalSeats: 20,
+      totalSeats: 30,
       basePrice: 2200,
       route: [
         { code: 'NDLS', seq: 1, arr: null, dep: '20:45', dist: 0 },
@@ -87,7 +88,7 @@ async function seed() {
       trainNumber: '20901',
       trainName: 'Vande Bharat Express',
       coachName: 'Executive Chair',
-      totalSeats: 20,
+      totalSeats: 30,
       basePrice: 1450,
       route: [
         { code: 'MMCT', seq: 1, arr: null, dep: '06:00', dist: 0 },
@@ -97,7 +98,7 @@ async function seed() {
   ];
 
   for (const t of TRAINS) {
-    // Upsert Train
+    console.log(`🚆 2. Processing Train ${t.trainName} (${t.trainNumber})...`);
     let train = await prisma.train.findUnique({ where: { trainNumber: t.trainNumber } });
     if (!train) {
       train = await prisma.train.create({
@@ -116,7 +117,7 @@ async function seed() {
           trainId: train.id,
           seatNumber: i,
           seatType: SEAT_TYPES[(i - 1) % SEAT_TYPES.length],
-          price: t.basePrice + ((i % 3) * 150),
+          price: t.basePrice + ((i % 3) * 100),
         });
       }
       await prisma.seat.createMany({ data: seatData });
@@ -144,27 +145,43 @@ async function seed() {
           });
         }
       }
+    }
 
-      try {
-        await adminProducer.publishTrainCreated(train);
-        const fullRoute = await prisma.route.findUnique({
-          where: { id: route.id },
-          include: { routeStations: true },
-        });
-        await adminProducer.publishRouteCreated(fullRoute);
-      } catch (err) {
-        console.warn(`Kafka event warning for train ${t.trainNumber}:`, err.message);
-      }
+    // Retrieve fully populated train with seats and route stations including station details
+    const fullTrain = await prisma.train.findUnique({
+      where: { id: train.id },
+      include: {
+        seats: { orderBy: { seatNumber: 'asc' } },
+        route: {
+          include: {
+            routeStations: {
+              include: { station: true },
+              orderBy: { sequenceNumber: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    try {
+      await adminProducer.publishTrainCreated(fullTrain);
+      await adminProducer.publishRouteCreated({
+        ...fullTrain.route,
+        train: fullTrain,
+      });
+    } catch (err) {
+      console.warn(`Kafka event warning for train route ${t.trainNumber}:`, err.message);
     }
 
     // 3. Create Schedules for the next 14 days
-    console.log(`📅 Creating Schedules for ${t.trainName} (${t.trainNumber})...`);
+    console.log(`📅 3. Creating Schedules for ${t.trainName}...`);
     for (let day = 0; day <= 14; day++) {
       const depDate = new Date();
       depDate.setDate(depDate.getDate() + day);
       depDate.setHours(0, 0, 0, 0);
+      const dateStr = formatDate(depDate);
 
-      const existingSchedule = await prisma.schedule.findUnique({
+      let schedule = await prisma.schedule.findUnique({
         where: {
           trainId_departureDate: {
             trainId: train.id,
@@ -173,39 +190,54 @@ async function seed() {
         },
       });
 
-      if (!existingSchedule) {
-        const schedule = await prisma.schedule.create({
+      if (!schedule) {
+        schedule = await prisma.schedule.create({
           data: {
             trainId: train.id,
             departureDate: depDate,
             status: 'ACTIVE',
           },
         });
+      }
 
-        try {
-          const scheduleWithTrain = await prisma.schedule.findUnique({
-            where: { id: schedule.id },
-            include: {
-              train: {
-                include: {
-                  seats: true,
-                  route: {
-                    include: { routeStations: true },
-                  },
-                },
-              },
-            },
-          });
-          await adminProducer.publishScheduleCreated(scheduleWithTrain);
-        } catch (err) {
-          console.warn(`Kafka event warning for schedule on day ${day}:`, err.message);
-        }
+      const schedulePayload = {
+        scheduleId: schedule.id,
+        trainId: fullTrain.id,
+        trainNumber: fullTrain.trainNumber,
+        trainName: fullTrain.trainName,
+        coachName: fullTrain.coachName,
+        totalSeats: fullTrain.totalSeats,
+        departureDate: dateStr,
+        status: schedule.status,
+        seats: fullTrain.seats.map((s) => ({
+          seatId: s.id,
+          seatNumber: s.seatNumber,
+          seatType: s.seatType,
+          price: s.price,
+        })),
+        route: fullTrain.route.routeStations.map((rs) => ({
+          stationId: rs.station.id,
+          stationName: rs.station.name,
+          stationCode: rs.station.code,
+          sequenceNumber: rs.sequenceNumber,
+          arrivalTime: rs.arrivalTime,
+          departureTime: rs.departureTime,
+          distanceFromOrigin: rs.distanceFromOrigin,
+        })),
+      };
+
+      try {
+        await adminProducer.publishScheduleCreated(schedulePayload);
+      } catch (err) {
+        console.warn(`Kafka event warning for schedule on ${dateStr}:`, err.message);
       }
     }
   }
 
+  // Small pause to allow Kafka messages to flush before closing producer
+  await new Promise((r) => setTimeout(r, 2000));
   await disconnectProducer().catch(() => {});
-  console.log('🎉 Seeding completed successfully!');
+  console.log('🎉 Full Seeding and Indexing completed successfully!');
 }
 
 seed()

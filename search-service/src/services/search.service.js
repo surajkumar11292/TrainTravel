@@ -48,6 +48,16 @@ const indexTrainRoute = async (routeEvent) => {
           if (seatSummary[s.seatType] !== undefined) seatSummary[s.seatType]++;
      });
 
+     let existingSchedules = [];
+     try {
+          const existing = await esClient.get({ index: TRAIN_INDEX, id: train.id });
+          if (existing._source && Array.isArray(existing._source.schedules)) {
+               existingSchedules = existing._source.schedules;
+          }
+     } catch (e) {
+          // Document does not exist yet
+     }
+
      const doc = {
           trainId: train.id,
           trainNumber: train.trainNumber,
@@ -61,7 +71,7 @@ const indexTrainRoute = async (routeEvent) => {
                departureTime: rs.departureTime,
                distanceFromOrigin: rs.distanceFromOrigin,
           })),
-          schedules: [],
+          schedules: existingSchedules,
           seatSummary,
      };
 
