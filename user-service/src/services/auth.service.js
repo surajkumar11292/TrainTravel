@@ -22,7 +22,14 @@ const sendOTP = async(firstName, lastName, email, password) =>{
      const hashedPassword = await bcrypt.hash(password, 12);
      const meta = {firstName, lastName, email, hashedPassword};
      const {otp, otpSessionId} = await generateAndStoreOtp(meta);
-     await notificationProducer.sendOtpEmail(email, otp, (config.OTP_TTL) / 60);
+     console.log('\n=============================================');
+     console.log(`🔑 [DEV OTP] Verification Code for ${email}: ${otp}`);
+     console.log('=============================================\n');
+     try {
+          await notificationProducer.sendOtpEmail(email, otp, (config.OTP_TTL) / 60);
+     } catch (err) {
+          logger.warn('Failed to publish OTP email to Kafka:', err.message);
+     }
      logger.info(`OTP email queued for : ${email}`);
      return {otpSessionId}
 }

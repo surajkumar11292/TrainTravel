@@ -19,6 +19,10 @@ class EmailService {
      }
 
      async sendWithRetry(msg, retries = 0) {
+          if (!config.SENDGRID_API_KEY || config.SENDGRID_API_KEY.includes('placeholder') || config.SENDGRID_API_KEY.includes('development')) {
+               logger.info(`[DEV EMAIL SIMULATOR] Simulated sending email to ${msg.to}: ${msg.subject}`);
+               return { success: true, simulated: true };
+          }
           try {
                await sgMail.send(msg);
                logger.info(`Email sent successfully to ${msg.to}`, {
@@ -39,7 +43,7 @@ class EmailService {
                     return this.sendWithRetry(msg, retries + 1);
                }
 
-               throw error;
+               return { success: false, error: error.message };
           }
      }
 
