@@ -38,15 +38,28 @@ export default function StationAutocomplete({ label, value, onChange, placeholde
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Sync external value changes
+  // Only sync external value if value is explicitly reset to empty while query had something
   useEffect(() => {
-    if (value !== undefined && value !== query) setQuery(value);
+    if (!value && query && !open) {
+      setQuery('');
+    }
   }, [value]);
 
   const handleSelect = (station) => {
-    setQuery(`${station.name} (${station.code})`);
+    const displayText = `${station.name} (${station.code})`;
+    setQuery(displayText);
     onChange(station.code, station.name);
     setOpen(false);
+  };
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    setQuery(val);
+    if (!val) {
+      onChange('', '');
+      setSuggestions([]);
+      setOpen(false);
+    }
   };
 
   return (
@@ -55,13 +68,13 @@ export default function StationAutocomplete({ label, value, onChange, placeholde
       <input
         type="text"
         value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          if (e.target.value.length < 2) onChange('', '');
+        onChange={handleInputChange}
+        onFocus={() => {
+          if (suggestions.length > 0) setOpen(true);
         }}
-        onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder={placeholder}
-        className="input-field"
+        className="input-field text-gray-900 bg-white"
+        autoComplete="off"
       />
       {loading && (
         <div className="absolute right-3 top-[38px]">

@@ -7,6 +7,7 @@
     "dev": "concurrently -n gateway,user,search,admin,inventory,booking,payment,notif,web -c cyan,blue,yellow,magenta,green,red,gray,white,bgBlue \"npm run dev:gateway\" \"npm run dev:user\" \"npm run dev:search\" \"npm run dev:admin\" \"npm run dev:inventory\" \"npm run dev:booking\" \"npm run dev:payment\" \"npm run dev:notification\" \"npm run dev:frontend\"",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "seed": "npm run seed --prefix admin-service",
     "install:all": "npm install --prefix shared && npm install --prefix api-gateway && npm install --prefix user-service && npm install --prefix search-service && npm install --prefix admin-service && npm install --prefix inventory-service && npm install --prefix booking-service && npm install --prefix payment-service && npm install --prefix notification-service && npm install --prefix frontend",
     "prisma:generate": "node -e \"const { execSync } = require('child_process'); ['user-service','admin-service','inventory-service','booking-service','payment-service'].forEach(s => execSync('npx prisma generate', { cwd: s, stdio: 'inherit' }))\"",
     "prisma:push": "node -e \"const { execSync } = require('child_process'); ['user-service','admin-service','inventory-service','booking-service','payment-service'].forEach(s => execSync('npx prisma db push', { cwd: s, stdio: 'inherit' }))\"",
