@@ -1,0 +1,25 @@
+{
+  "name": "traintravel-platform",
+  "version": "1.0.0",
+  "description": "TrainTravel Enterprise Microservices Railway Booking Platform",
+  "private": true,
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "install:all": "npm install --prefix shared && npm install --prefix api-gateway && npm install --prefix user-service && npm install --prefix search-service && npm install --prefix admin-service && npm install --prefix inventory-service && npm install --prefix booking-service && npm install --prefix payment-service && npm install --prefix notification-service && npm install --prefix frontend",
+    "prisma:generate": "npx --prefix user-service prisma generate && npx --prefix admin-service prisma generate && npx --prefix inventory-service prisma generate && npx --prefix booking-service prisma generate && npx --prefix payment-service prisma generate",
+    "prisma:push": "npx --prefix user-service prisma db push && npx --prefix admin-service prisma db push && npx --prefix inventory-service prisma db push && npx --prefix booking-service prisma db push && npx --prefix payment-service prisma db push",
+    "dev:gateway": "npm run dev --prefix api-gateway",
+    "dev:user": "npm run dev --prefix user-service",
+    "dev:search": "npm run dev --prefix search-service",
+    "dev:admin": "npm run dev --prefix admin-service",
+    "dev:inventory": "npm run dev --prefix inventory-service",
+    "dev:booking": "npm run dev --prefix booking-service",
+    "dev:payment": "npm run dev --prefix payment-service",
+    "dev:notification": "npm run dev --prefix notification-service",
+    "dev:frontend": "npm run dev --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
