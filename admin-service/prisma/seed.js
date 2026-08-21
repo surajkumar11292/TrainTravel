@@ -23,9 +23,31 @@ const SEAT_TYPES = ['LOWER', 'MIDDLE', 'UPPER', 'SIDE_LOWER', 'SIDE_UPPER'];
 
 const formatDate = (d) => d.toISOString().split('T')[0];
 
+let kafkaConnected = false;
+
+const isKafkaReachable = () => new Promise((resolve) => {
+  const net = require('net');
+  const socket = new net.Socket();
+  socket.setTimeout(400);
+  socket.on('connect', () => { socket.destroy(); resolve(true); });
+  socket.on('timeout', () => { socket.destroy(); resolve(false); });
+  socket.on('error', () => { socket.destroy(); resolve(false); });
+  socket.connect(9093, '127.0.0.1');
+});
+
 async function seed() {
-  console.log('🌱 Starting TrainTravel Full Seeding & Kafka Synchronization...');
-  await connectProducer().catch((e) => console.warn('Kafka producer warning:', e.message));
+  console.log('🌱 Starting TrainTravel Database Seeding into Neon...');
+  if (await isKafkaReachable()) {
+    try {
+      await connectProducer();
+      kafkaConnected = true;
+      console.log('✅ Kafka is connected. Events will be published.');
+    } catch (e) {
+      console.log('ℹ️  Kafka connect failed, populating database directly.');
+    }
+  } else {
+    console.log('ℹ️  Kafka is offline (skipping real-time events, populating database directly).');
+  }
 
   // 1. Seed Stations
   console.log('📍 1. Seeding Stations...');
@@ -37,10 +59,10 @@ async function seed() {
       create: st,
     });
     createdStations[st.code] = station;
-    try {
-      await adminProducer.publishStationCreated(station);
-    } catch (err) {
-      console.warn(`Kafka event warning for station ${st.code}:`, err.message);
+    if (kafkaConnected) {
+      try {
+        await adminProducer.publishStationCreated(station);
+      } catch (err) {}
     }
   }
   console.log(`✅ Seeded ${Object.keys(createdStations).length} stations.`);
@@ -163,14 +185,14 @@ async function seed() {
       },
     });
 
-    try {
-      await adminProducer.publishTrainCreated(fullTrain);
-      await adminProducer.publishRouteCreated({
-        ...fullTrain.route,
-        train: fullTrain,
-      });
-    } catch (err) {
-      console.warn(`Kafka event warning for train route ${t.trainNumber}:`, err.message);
+    if (kafkaConnected) {
+      try {
+        await adminProducer.publishTrainCreated(fullTrain);
+        await adminProducer.publishRouteCreated({
+          ...fullTrain.route,
+          train: fullTrain,
+        });
+      } catch (err) {}
     }
 
     // 3. Create Schedules for the next 14 days
@@ -181,24 +203,20 @@ async function seed() {
       depDate.setHours(0, 0, 0, 0);
       const dateStr = formatDate(depDate);
 
-      let schedule = await prisma.schedule.findUnique({
+      const schedule = await prisma.schedule.upsert({
         where: {
           trainId_departureDate: {
             trainId: train.id,
             departureDate: depDate,
           },
         },
+        update: { status: 'ACTIVE' },
+        create: {
+          trainId: train.id,
+          departureDate: depDate,
+          status: 'ACTIVE',
+        },
       });
-
-      if (!schedule) {
-        schedule = await prisma.schedule.create({
-          data: {
-            trainId: train.id,
-            departureDate: depDate,
-            status: 'ACTIVE',
-          },
-        });
-      }
 
       const schedulePayload = {
         scheduleId: schedule.id,
@@ -226,10 +244,10 @@ async function seed() {
         })),
       };
 
-      try {
-        await adminProducer.publishScheduleCreated(schedulePayload);
-      } catch (err) {
-        console.warn(`Kafka event warning for schedule on ${dateStr}:`, err.message);
+      if (kafkaConnected) {
+        try {
+          await adminProducer.publishScheduleCreated(schedulePayload);
+        } catch (err) {}
       }
     }
   }
