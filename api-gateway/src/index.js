@@ -12,6 +12,8 @@ const { corsMiddleware } = require('./middlewares/cors.middleware');
 const routes = require('./routes');
 const app = express();
 
+// Production deployment trigger - connected to Vercel & Render microservices
+
 
 app.use(corsMiddleware);
 app.use(helmet({
