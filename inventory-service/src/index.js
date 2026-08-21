@@ -57,13 +57,16 @@ app.use(errorHandler);
 
 const startServer = async () => {
      try {
-          await inventoryConsumer.start();
-          startLockExpiryJob();
-
           const server = app.listen(config.PORT, () => {
                logger.info(
                     `${config.SERVICE_NAME} is running on port ${config.PORT}`
                );
+          });
+
+          // Start background jobs & consumer non-blockingly
+          startLockExpiryJob();
+          inventoryConsumer.start().catch((err) => {
+               logger.warn('Kafka inventoryConsumer could not connect, running with DB/Redis only:', err.message);
           });
 
           // Graceful shutdown
@@ -72,7 +75,7 @@ const startServer = async () => {
                stopLockExpiryJob();
 
                server.close(async () => {
-                    await disconnectAll();
+                    await disconnectAll().catch(() => {});
                     logger.info('Server closed');
                     process.exit(0);
                });

@@ -1,38 +1,33 @@
 require('dotenv').config();
+const express = require('express');
 const emailConsumer = require('./kafka/consumer/email.consumer');
 const logger = require('./config/logger');
-async function startNotificationService() {
-     try {
-          logger.info('Starting Notification Service...');
 
-          const requiredEnvVars = ['SENDGRID_API_KEY', 'MAIL_SEND', 'KAFKA_BROKER'];
-          const missing = requiredEnvVars.filter(varName => !process.env[varName]);
+const app = express();
+const PORT = process.env.PORT || 4004;
 
-          if (missing.length > 0) {
-               throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-          }
+app.use(express.json());
 
-          await emailConsumer.start();
-
-          logger.info('✅ Notification Service started successfully');
-          logger.info('Service is ready to process notifications');
-
-     } catch (error) {
-          logger.error('Failed to start Notification Service', {
-               error: error.message,
-               stack: error.stack
-          });
-          process.exit(1);
-     }
-}
-
-process.on('unhandledRejection', (reason, promise) => {
-     logger.error('Unhandled Rejection', { reason, promise });
+app.get('/', (req, res) => {
+     res.send('Notification Service is running');
 });
 
-process.on('uncaughtException', (error) => {
-     logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
-     process.exit(1);
+app.get('/health', (req, res) => {
+     res.status(200).json({ status: 'ok', service: 'notification-service' });
 });
 
-startNotificationService();
+const server = app.listen(PORT, () => {
+     logger.info(`✅ Notification Service listening on port ${PORT}`);
+     
+     // Start Kafka consumer in background if broker is reachable
+     emailConsumer.start().catch((err) => {
+          logger.warn('Kafka consumer could not connect, running in standalone HTTP mode:', err.message);
+     });
+});
+
+process.on('SIGTERM', () => {
+     server.close(() => process.exit(0));
+});
+process.on('SIGINT', () => {
+     server.close(() => process.exit(0));
+});

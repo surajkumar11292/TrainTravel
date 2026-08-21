@@ -62,13 +62,16 @@ app.use(errorHandler);
 
 const startServer = async () => {
      try {
-          await bookingConsumer.start();
-          startBookingExpiryJob();
-
           const server = app.listen(config.PORT, () => {
                logger.info(
                     `${config.SERVICE_NAME} is running on port ${config.PORT}`
                );
+          });
+
+          // Start background jobs & consumer non-blockingly
+          startBookingExpiryJob();
+          bookingConsumer.start().catch((err) => {
+               logger.warn('Kafka bookingConsumer could not connect, running with DB/Redis only:', err.message);
           });
 
           // Graceful shutdown
@@ -77,8 +80,8 @@ const startServer = async () => {
                stopBookingExpiryJob();
 
                server.close(async () => {
-                    await disconnectAll();
-                    await RedisClient.closeConnection();
+                    await disconnectAll().catch(() => {});
+                    await RedisClient.closeConnection().catch(() => {});
                     logger.info('Server closed');
                     process.exit(0);
                });

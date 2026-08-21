@@ -45,21 +45,25 @@ app.get('/health', (req, res) => res.json({ status: 'ok', service: config.SERVIC
 app.use(errorHandler);
 
 const startServer = async () => {
-     if (process.env.ES_RECREATE_INDICES === 'true') {
-          await recreateIndices();
-     } else {
-          await initIndices();
-     }
-     await searchConsumer.start();
-
      const server = app.listen(config.PORT, () => {
           logger.info(`${config.SERVICE_NAME} running on http://localhost:${config.PORT}`);
      });
 
+     try {
+          if (process.env.ES_RECREATE_INDICES === 'true') {
+               await recreateIndices().catch(e => logger.warn('Elasticsearch recreateIndices skipped:', e.message));
+          } else {
+               await initIndices().catch(e => logger.warn('Elasticsearch initIndices skipped:', e.message));
+          }
+          searchConsumer.start().catch(e => logger.warn('Kafka searchConsumer skipped:', e.message));
+     } catch (e) {
+          logger.warn('Search service running in standalone mode:', e.message);
+     }
+
      const shutdown = async () => {
           logger.info('Shutting down...');
           server.close(async () => {
-               await disconnectAll();
+               await disconnectAll().catch(() => {});
                process.exit(0);
           });
      };

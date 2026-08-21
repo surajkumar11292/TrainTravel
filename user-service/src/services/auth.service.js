@@ -101,6 +101,9 @@ const rotateRefreshToken = async(refreshToken, deviceId) =>{
 }
 
 const verifyGoogleIdToken = async(idToken, deviceId) =>{
+     if (!config.GOOGLE_CLIENT_ID) {
+          throw new BadRequestError('Google OAuth is not configured on this server');
+     }
      const ticket = await client.verifyIdToken({
           idToken,
           audience: config.GOOGLE_CLIENT_ID
