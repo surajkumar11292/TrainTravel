@@ -6,8 +6,11 @@ const { internalAuth } = require('../middlewares/internalAuth.middleware');
 
 const router = express.Router();
 
+// Internal endpoints (used by search-service for DB-fallback search)
 router.get("/station/internal/:stationId", internalAuth, getStationByIdInternal);
+router.get("/internal/stations", internalAuth, getAllStations);
 
+// Public/gateway endpoints
 router.get("/station", getUserContext, getAllStations);
 router.get("/station/:stationId", getUserContext, getStationById);
 router.post("/station", getUserContext, createStation);

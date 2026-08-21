@@ -7,6 +7,9 @@ const config = {
      KAFKA_BROKER: process.env.KAFKA_BROKER,
      KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
      ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
+     DATABASE_URL: process.env.DATABASE_URL,
+     ADMIN_SERVICE_URL: process.env.ADMIN_SERVICE_URL,
+     INTERNAL_SERVICE_KEY: process.env.INTERNAL_SERVICE_KEY,
 }
 
 module.exports = { config };

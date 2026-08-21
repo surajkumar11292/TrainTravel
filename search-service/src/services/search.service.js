@@ -1,394 +1,323 @@
-const { esClient, TRAIN_INDEX, STATION_INDEX } = require('../config/elasticsearch');
 const logger = require('../config/logger');
+const { config } = require('.');
+const https = require('https');
+const http = require('http');
+
+// ─── Elasticsearch (optional) ────────────────────────────────────────────────
+
+const ES_ENABLED = !!config.ELASTICSEARCH_URL;
+let esClient;
+
+if (ES_ENABLED) {
+     try {
+          const { Client } = require('@elastic/elasticsearch');
+          esClient = new Client({ node: config.ELASTICSEARCH_URL });
+          logger.info('Elasticsearch enabled');
+     } catch (e) {
+          logger.warn('Elasticsearch client init failed, using DB fallback');
+     }
+}
+
+// ─── Admin Service HTTP Client (fallback) ────────────────────────────────────
+
+const ADMIN_URL = config.ADMIN_SERVICE_URL || '';
+const INTERNAL_KEY = config.INTERNAL_SERVICE_KEY || '';
+
+function httpGet(url) {
+     return new Promise((resolve, reject) => {
+          const mod = url.startsWith('https') ? https : http;
+          const req = mod.get(url, { headers: { 'x-internal-service-key': INTERNAL_KEY } }, (res) => {
+               let data = '';
+               res.on('data', chunk => data += chunk);
+               res.on('end', () => {
+                    try {
+                         resolve(JSON.parse(data));
+                    } catch (e) {
+                         reject(new Error('Invalid JSON from admin service'));
+                    }
+               });
+          });
+          req.on('error', reject);
+          req.setTimeout(10000, () => { req.destroy(); reject(new Error('Admin service timeout')); });
+     });
+}
+
+// ─── DB Fallback: Fetch stations from admin service ──────────────────────────
+
+let stationsCache = null;
+let stationsCacheAt = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+
+async function getStationsFromDB() {
+     if (stationsCache && Date.now() - stationsCacheAt < CACHE_TTL_MS) {
+          return stationsCache;
+     }
+     try {
+          const res = await httpGet(`${ADMIN_URL}/station?limit=200`);
+          const stations = (res.data || []).map(s => ({
+               stationId: s.id,
+               name: s.name,
+               code: s.code,
+               city: s.city,
+               state: s.state,
+          }));
+          stationsCache = stations;
+          stationsCacheAt = Date.now();
+          return stations;
+     } catch (err) {
+          logger.error('Failed to fetch stations from admin service', { error: err.message });
+          return stationsCache || [];
+     }
+}
+
+// ─── DB Fallback: Fetch trains+routes+schedules from admin ───────────────────
+
+let trainsCache = null;
+let trainsCacheAt = 0;
+
+async function getTrainsFromDB() {
+     if (trainsCache && Date.now() - trainsCacheAt < CACHE_TTL_MS) {
+          return trainsCache;
+     }
+     try {
+          const [trainsRes, schedulesRes] = await Promise.all([
+               httpGet(`${ADMIN_URL}/train`),
+               httpGet(`${ADMIN_URL}/schedule`),
+          ]);
+          const trains = trainsRes.data || [];
+          const schedules = schedulesRes.data || [];
+
+          // Group schedules by trainId
+          const scheduleMap = {};
+          for (const s of schedules) {
+               if (!scheduleMap[s.trainId]) scheduleMap[s.trainId] = [];
+               scheduleMap[s.trainId].push(s);
+          }
+
+          const result = trains.map(t => ({
+               trainId: t.id,
+               trainNumber: t.trainNumber,
+               trainName: t.trainName,
+               seats: t.seats || [],
+               route: t.route
+                    ? (t.route.routeStations || []).map(rs => ({
+                         stationId: rs.station.id,
+                         stationName: rs.station.name,
+                         stationCode: rs.station.code,
+                         sequenceNumber: rs.sequenceNumber,
+                         arrivalTime: rs.arrivalTime,
+                         departureTime: rs.departureTime,
+                         distanceFromOrigin: rs.distanceFromOrigin,
+                    }))
+                    : [],
+               schedules: (scheduleMap[t.id] || []).map(s => ({
+                    scheduleId: s.id,
+                    departureDate: s.departureDate,
+                    status: s.status,
+               })),
+          }));
+
+          trainsCache = result;
+          trainsCacheAt = Date.now();
+          return result;
+     } catch (err) {
+          logger.error('Failed to fetch trains from admin service', { error: err.message });
+          return trainsCache || [];
+     }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function normalize(d) {
+     return new Date(d).toISOString().slice(0, 10);
+}
+
+function matchesQuery(text, query) {
+     if (!text) return false;
+     return text.toLowerCase().includes(query.toLowerCase());
+}
+
+function resolveStationFromList(input, stations) {
+     const q = input.toLowerCase().trim();
+     // Exact code match
+     const byCode = stations.find(s => s.code && s.code.toLowerCase() === q);
+     if (byCode) return byCode;
+     // Exact name match
+     const byName = stations.find(s => s.name && s.name.toLowerCase() === q);
+     if (byName) return byName;
+     // Partial match on name or city
+     const partial = stations.find(s =>
+          (s.name && s.name.toLowerCase().includes(q)) ||
+          (s.city && s.city.toLowerCase().includes(q))
+     );
+     return partial || null;
+}
+
+// ─── Autocomplete Station (DB fallback) ──────────────────────────────────────
+
+const autocompleteStationDB = async (prefix) => {
+     const stations = await getStationsFromDB();
+     const q = prefix.toLowerCase().trim();
+     return stations
+          .filter(s =>
+               (s.name && s.name.toLowerCase().includes(q)) ||
+               (s.code && s.code.toLowerCase().startsWith(q)) ||
+               (s.city && s.city.toLowerCase().includes(q))
+          )
+          .slice(0, 10)
+          .map(s => ({ name: s.name, code: s.code, stationId: s.stationId, city: s.city }));
+};
+
+// ─── Search Trains (DB fallback) ─────────────────────────────────────────────
+
+const searchTrainsDB = async (from, to, date) => {
+     const [stations, trains] = await Promise.all([getStationsFromDB(), getTrainsFromDB()]);
+
+     const fromStation = resolveStationFromList(from, stations);
+     const toStation = resolveStationFromList(to, stations);
+
+     if (!fromStation) return { trains: [], message: `Station "${from}" not found` };
+     if (!toStation) return { trains: [], message: `Station "${to}" not found` };
+
+     const results = [];
+
+     for (const train of trains) {
+          if (!train.route || train.route.length === 0) continue;
+
+          const fromStop = train.route.find(r => r.stationId === fromStation.stationId);
+          const toStop = train.route.find(r => r.stationId === toStation.stationId);
+
+          if (!fromStop || !toStop) continue;
+          if (fromStop.sequenceNumber >= toStop.sequenceNumber) continue;
+
+          // Build seat summary
+          const seatSummary = { total: 0, LOWER: 0, MIDDLE: 0, UPPER: 0, SIDE_LOWER: 0, SIDE_UPPER: 0 };
+          for (const seat of train.seats) {
+               seatSummary.total++;
+               if (seatSummary[seat.seatType] !== undefined) seatSummary[seat.seatType]++;
+          }
+
+          // Find matching schedule
+          let schedule = null;
+          if (date && train.schedules.length > 0) {
+               schedule = train.schedules.find(
+                    s => s.status === 'ACTIVE' && normalize(s.departureDate) === date
+               ) || null;
+          }
+
+          results.push({
+               trainId: train.trainId,
+               trainNumber: train.trainNumber,
+               trainName: train.trainName,
+               from: {
+                    name: fromStop.stationName,
+                    code: fromStop.stationCode,
+                    departure: fromStop.departureTime,
+                    stationId: fromStop.stationId,
+                    sequenceNumber: fromStop.sequenceNumber,
+               },
+               to: {
+                    name: toStop.stationName,
+                    code: toStop.stationCode,
+                    arrival: toStop.arrivalTime,
+                    stationId: toStop.stationId,
+                    sequenceNumber: toStop.sequenceNumber,
+               },
+               seatSummary,
+               schedule,
+          });
+     }
+
+     return {
+          from: { resolved: fromStation.name, code: fromStation.code },
+          to: { resolved: toStation.name, code: toStation.code },
+          date: date || 'any',
+          count: results.length,
+          trains: results,
+     };
+};
 
 // ═══════════════════════════════════════════════════
-//  INDEX OPERATIONS (called by Kafka consumer)
+//  INDEX OPERATIONS (called by Kafka consumer — ES only)
 // ═══════════════════════════════════════════════════
 
-/**
- * When admin creates a station, index it for autocomplete.
- * Event shape: { eventType, data: { id, name, code, city, state }, timestamp }
- */
 const indexStation = async (event) => {
+     if (!ES_ENABLED || !esClient) return;
+     const { esClient: es, STATION_INDEX } = require('./elasticsearch_client');
      const station = event.data;
      if (!station) return;
-
      try {
           await esClient.index({
-               index: STATION_INDEX,
+               index: 'stations',
                id: station.id,
                document: {
                     stationId: station.id,
                     name: station.name,
                     code: station.code,
                     city: station.city,
-                    suggest: {
-                         input: [station.name, station.code, station.city].filter(Boolean),
-                         weight: 10,
-                    },
+                    suggest: { input: [station.name, station.code, station.city].filter(Boolean), weight: 10 },
                },
                refresh: true,
           });
-          logger.info(`Indexed station ${station.name} (${station.code})`);
+          // Invalidate cache
+          stationsCache = null;
+          logger.info(`Indexed station ${station.name}`);
      } catch (err) {
           logger.error(`Failed to index station: ${err.message}`);
      }
 };
 
-/**
- * When admin creates a route, we get enriched payload with train+seats+routeStations.
- */
-const indexTrainRoute = async (routeEvent) => {
-     const { train, routeStations } = routeEvent;
-     if (!train || !routeStations) return;
-
-     const seatSummary = { total: 0, LOWER: 0, MIDDLE: 0, UPPER: 0, SIDE_LOWER: 0, SIDE_UPPER: 0 };
-     (train.seats || []).forEach((s) => {
-          seatSummary.total++;
-          if (seatSummary[s.seatType] !== undefined) seatSummary[s.seatType]++;
-     });
-
-     let existingSchedules = [];
-     try {
-          const existing = await esClient.get({ index: TRAIN_INDEX, id: train.id });
-          if (existing._source && Array.isArray(existing._source.schedules)) {
-               existingSchedules = existing._source.schedules;
-          }
-     } catch (e) {
-          // Document does not exist yet
-     }
-
-     const doc = {
-          trainId: train.id,
-          trainNumber: train.trainNumber,
-          trainName: train.trainName,
-          route: routeStations.map((rs) => ({
-               stationId: rs.station.id,
-               stationName: rs.station.name,
-               stationCode: rs.station.code,
-               sequenceNumber: rs.sequenceNumber,
-               arrivalTime: rs.arrivalTime,
-               departureTime: rs.departureTime,
-               distanceFromOrigin: rs.distanceFromOrigin,
-          })),
-          schedules: existingSchedules,
-          seatSummary,
-     };
-
-     await esClient.index({
-          index: TRAIN_INDEX,
-          id: train.id,
-          document: doc,
-          refresh: true,
-     });
-
-     // Also index/update stations for autocomplete
-     for (const rs of routeStations) {
-          await esClient.index({
-               index: STATION_INDEX,
-               id: rs.station.id,
-               document: {
-                    stationId: rs.station.id,
-                    name: rs.station.name,
-                    code: rs.station.code,
-                    city: rs.station.city,
-                    suggest: {
-                         input: [rs.station.name, rs.station.code, rs.station.city].filter(Boolean),
-                         weight: 10,
-                    },
-               },
-               refresh: true,
-          });
-     }
-
-     logger.info(`Indexed train ${train.trainNumber} with ${routeStations.length} stations`);
-};
-
-/**
- * When admin creates a schedule, add it to the train's schedules array.
- */
-const indexSchedule = async (scheduleEvent) => {
-     const { scheduleId, trainId, departureDate, status, seats } = scheduleEvent;
-
-     const totalSeats = seats ? seats.length : 0;
-
-     try {
-          await esClient.update({
-               index: TRAIN_INDEX,
-               id: trainId,
-               script: {
-                    source: `
-            if (ctx._source.schedules == null) { ctx._source.schedules = []; }
-            // Remove existing schedule with same id (idempotent)
-            ctx._source.schedules.removeIf(s -> s.scheduleId == params.scheduleId);
-            ctx._source.schedules.add(params.newSchedule);
-          `,
-                    params: {
-                         scheduleId,
-                         newSchedule: {
-                              scheduleId,
-                              departureDate,
-                              status,
-                              available: totalSeats,
-                              locked: 0,
-                              booked: 0,
-                         },
-                    },
-               },
-               refresh: true,
-          });
-          logger.info(`Indexed schedule ${scheduleId} for train ${trainId}`);
-     } catch (err) {
-          logger.warn(`Could not index schedule for train ${trainId}: ${err.message}`);
-     }
-};
-
-/**
- * When admin cancels a schedule, update its status in ES.
- * Event shape: { eventType, data: { id, trainId, status: 'CANCELLED', ... }, timestamp }
- */
-const cancelSchedule = async (event) => {
-     const schedule = event.data;
-     if (!schedule) return;
-
-     try {
-          await esClient.update({
-               index: TRAIN_INDEX,
-               id: schedule.trainId,
-               script: {
-                    source: `
-            if (ctx._source.schedules != null) {
-              for (def s : ctx._source.schedules) {
-                if (s.scheduleId == params.scheduleId) {
-                  s.status = 'CANCELLED';
-                }
-              }
-            }
-          `,
-                    params: { scheduleId: schedule.id },
-               },
-               refresh: true,
-          });
-          logger.info(`Cancelled schedule ${schedule.id} for train ${schedule.trainId}`);
-     } catch (err) {
-          logger.warn(`Could not cancel schedule: ${err.message}`);
-     }
-};
-
-/**
- * When inventory changes (seat booked/released), update availability counts.
- */
-const updateSeatAvailability = async (event) => {
-     const { scheduleId, trainId, available, locked, booked } = event;
-
-     try {
-          await esClient.update({
-               index: TRAIN_INDEX,
-               id: trainId,
-               script: {
-                    source: `
-            if (ctx._source.schedules != null) {
-              for (def s : ctx._source.schedules) {
-                if (s.scheduleId == params.scheduleId) {
-                  s.available = params.available;
-                  s.locked    = params.locked;
-                  s.booked    = params.booked;
-                }
-              }
-            }
-          `,
-                    params: { scheduleId, available: available || 0, locked: locked || 0, booked: booked || 0 },
-               },
-               refresh: true,
-          });
-          logger.info(`Updated availability for schedule ${scheduleId}`);
-     } catch (err) {
-          logger.warn(`Could not update availability: ${err.message}`);
-     }
-};
+const indexTrainRoute = async () => { trainsCache = null; };
+const indexSchedule = async () => { trainsCache = null; };
+const cancelSchedule = async () => { trainsCache = null; };
+const updateSeatAvailability = async () => { trainsCache = null; };
 
 // ═══════════════════════════════════════════════════
-//  SEARCH OPERATIONS (called by API)
+//  PUBLIC API
 // ═══════════════════════════════════════════════════
 
-/**
- * Search trains running between two stations on a given date.
- * Supports fuzzy matching on station names.
- */
-const searchTrains = async (from, to, date) => {
-     const fromStation = await resolveStation(from);
-     const toStation = await resolveStation(to);
-
-     if (!fromStation) return { trains: [], message: `Station "${from}" not found` };
-     if (!toStation) return { trains: [], message: `Station "${to}" not found` };
-
-     const query = {
-          bool: {
-               must: [
-                    {
-                         nested: {
-                              path: 'route',
-                              query: { term: { 'route.stationId': fromStation.stationId } },
-                              inner_hits: { name: 'from_station' },
-                         },
-                    },
-                    {
-                         nested: {
-                              path: 'route',
-                              query: { term: { 'route.stationId': toStation.stationId } },
-                              inner_hits: { name: 'to_station' },
-                         },
-                    },
-               ],
-          },
-     };
-
-     const result = await esClient.search({
-          index: TRAIN_INDEX,
-          query,
-          size: 50,
-     });
-
-     const normalize = (d) => new Date(d).toISOString().slice(0, 10);
-
-     const trains = result.hits.hits
-          .map((hit) => {
-               const src = hit._source;
-               const fromHit = hit.inner_hits.from_station.hits.hits[0]?._source;
-               const toHit = hit.inner_hits.to_station.hits.hits[0]?._source;
-
-               if (!fromHit || !toHit || fromHit.sequenceNumber >= toHit.sequenceNumber) {
-                    return null;
-               }
-
-               let scheduleInfo = null;
-               if (date && src.schedules && src.schedules.length > 0) {
-                    scheduleInfo = src.schedules.find(
-                         (s) => s.status === 'ACTIVE' && normalize(s.departureDate) === date
-                    ) || null;
-               }
-
-               return {
-                    trainId: src.trainId,
-                    trainNumber: src.trainNumber,
-                    trainName: src.trainName,
-                    // --- SEGMENT BOOKING: Added stationId and sequenceNumber to from/to for segment-aware booking ---
-                    from: { name: fromHit.stationName, code: fromHit.stationCode, departure: fromHit.departureTime, stationId: fromHit.stationId, sequenceNumber: fromHit.sequenceNumber },
-                    to: { name: toHit.stationName, code: toHit.stationCode, arrival: toHit.arrivalTime, stationId: toHit.stationId, sequenceNumber: toHit.sequenceNumber },
-                    seatSummary: src.seatSummary,
-                    schedule: scheduleInfo,
-               };
-          })
-          .filter(Boolean);
-
-     return {
-          from: { resolved: fromStation.name, code: fromStation.code },
-          to: { resolved: toStation.name, code: toStation.code },
-          date: date || 'any',
-          count: trains.length,
-          trains,
-     };
-};
-
-/**
- * Fuzzy-resolve a station name/code to its ID.
- * Three strategies: exact code → completion suggester → fuzzy match
- */
-const resolveStation = async (input) => {
-     // 1. Try exact code match
-     const exactResult = await esClient.search({
-          index: STATION_INDEX,
-          query: { term: { code: input.toUpperCase() } },
-          size: 1,
-     });
-     if (exactResult.hits.hits.length > 0) return exactResult.hits.hits[0]._source;
-
-     // 2. Try completion suggester (handles typos like "dehli" → "Delhi")
-     try {
-          const suggestResult = await esClient.search({
-               index: STATION_INDEX,
-               suggest: {
-                    station_suggest: {
-                         prefix: input,
-                         completion: {
-                              field: 'suggest',
-                              fuzzy: { fuzziness: 'AUTO' },
-                              size: 1,
-                         },
-                    },
-               },
-          });
-          const options = suggestResult.suggest?.station_suggest?.[0]?.options || [];
-          if (options.length > 0) return options[0]._source;
-     } catch (err) {
-          logger.warn(`Suggest fallback failed: ${err.message}`);
-     }
-
-     // 3. Fuzzy match on name
-     const fuzzyResult = await esClient.search({
-          index: STATION_INDEX,
-          query: {
-               multi_match: {
-                    query: input,
-                    fields: ['name', 'city'],
-                    fuzziness: 'AUTO',
-                    prefix_length: 1,
-               },
-          },
-          size: 1,
-     });
-
-     return fuzzyResult.hits.hits.length > 0 ? fuzzyResult.hits.hits[0]._source : null;
-};
-
-/**
- * Autocomplete station names as user types.
- */
 const autocompleteStation = async (prefix) => {
-     const result = await esClient.search({
-          index: STATION_INDEX,
-          suggest: {
-               station_suggest: {
-                    prefix,
-                    completion: {
-                         field: 'suggest',
-                         fuzzy: { fuzziness: 'AUTO' },
-                         size: 10,
+     if (ES_ENABLED && esClient) {
+          try {
+               const { STATION_INDEX } = require('../config/elasticsearch');
+               const result = await esClient.search({
+                    index: STATION_INDEX,
+                    suggest: {
+                         station_suggest: {
+                              prefix,
+                              completion: { field: 'suggest', fuzzy: { fuzziness: 'AUTO' }, size: 10 },
+                         },
                     },
-               },
-          },
-     });
-
-     const options = result.suggest.station_suggest[0]?.options || [];
-     return options.map((o) => ({
-          name: o._source.name,
-          code: o._source.code,
-          stationId: o._source.stationId,
-     }));
+               });
+               const options = result.suggest.station_suggest[0]?.options || [];
+               if (options.length > 0) {
+                    return options.map(o => ({ name: o._source.name, code: o._source.code, stationId: o._source.stationId }));
+               }
+          } catch (err) {
+               logger.warn('ES autocomplete failed, falling back to DB', { error: err.message });
+          }
+     }
+     return autocompleteStationDB(prefix);
 };
 
-/**
- * Debug: get all indexed stations
- */
+const searchTrains = async (from, to, date) => {
+     if (ES_ENABLED && esClient) {
+          try {
+               const { searchTrainsES } = require('./search.service.es');
+               return await searchTrainsES(from, to, date);
+          } catch (err) {
+               logger.warn('ES search failed, falling back to DB', { error: err.message });
+          }
+     }
+     return searchTrainsDB(from, to, date);
+};
+
 const getAllStations = async () => {
-     const result = await esClient.search({
-          index: STATION_INDEX,
-          query: { match_all: {} },
-          size: 100,
-     });
-     return result.hits.hits.map((h) => h._source);
+     return getStationsFromDB();
 };
 
-/**
- * Debug: get all indexed trains
- */
 const getAllTrains = async () => {
-     const result = await esClient.search({
-          index: TRAIN_INDEX,
-          query: { match_all: {} },
-          size: 100,
-     });
-     return result.hits.hits.map((h) => h._source);
+     return getTrainsFromDB();
 };
 
 module.exports = {

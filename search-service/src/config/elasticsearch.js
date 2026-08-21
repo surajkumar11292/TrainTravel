@@ -2,7 +2,10 @@ const { Client } = require('@elastic/elasticsearch');
 const { config } = require('.');
 const logger = require('./logger');
 
-const esClient = new Client({ node: config.ELASTICSEARCH_URL });
+// If no ES URL is configured, export null client — callers must check before using
+const esClient = config.ELASTICSEARCH_URL ? new Client({ node: config.ELASTICSEARCH_URL }) : null;
+if (!esClient) logger.warn('ELASTICSEARCH_URL not set — Elasticsearch disabled');
+
 
 const STATION_INDEX = 'stations';
 const TRAIN_INDEX = 'trains';
@@ -16,6 +19,10 @@ const SCHEDULE_INDEX = 'schedules';
  *   • Full-text     (text analyzer)
  */
 const initIndices = async () => {
+     if (!esClient) {
+          logger.info('Elasticsearch not configured — skipping index initialization');
+          return;
+     }
      // ── Station index (for autocomplete) ──
      const stationExists = await esClient.indices.exists({ index: STATION_INDEX });
      if (!stationExists) {
