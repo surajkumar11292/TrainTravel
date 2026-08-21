@@ -9,7 +9,9 @@ const isProd = process.env.NODE_ENV === 'production';
 const cookieOptions = (maxAge) => ({
      httpOnly: true,
      secure: isProd,
-     sameSite: isProd ? 'strict' : 'lax',
+     // Cross-origin: Vercel (frontend) → Render (backend) requires sameSite='none' + secure=true
+     // 'strict' would block cookies completely for cross-site requests
+     sameSite: isProd ? 'none' : 'lax',
      maxAge,
 });
 

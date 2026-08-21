@@ -1,4 +1,4 @@
-const { producer, connectProducer } = require('../../config/kafka');
+const { producer, connectProducer, KAFKA_ENABLED } = require('../../config/kafka');
 const logger = require('../../config/logger');
 const { KAFKA_TOPICS } = require('../../../../shared/constants/kafka-topics');
 
@@ -9,10 +9,9 @@ class BookingProducer {
      constructor() { this.isInitialized = false; }
 
      async initialize() {
-          if (!this.isInitialized) {
-               await connectProducer();
-               this.isInitialized = true;
-          }
+          if (!KAFKA_ENABLED || this.isInitialized) return;
+          await connectProducer();
+          this.isInitialized = true;
      }
 
      /**
@@ -20,6 +19,10 @@ class BookingProducer {
       * must not be silently lost — callers should handle the thrown error.
       */
      async sendMessage(topic, key, value) {
+          if (!KAFKA_ENABLED) {
+               logger.warn(`Kafka disabled — skipping publish to topic: ${topic}`, { key });
+               return null;
+          }
           await this.initialize();
 
           let lastError;

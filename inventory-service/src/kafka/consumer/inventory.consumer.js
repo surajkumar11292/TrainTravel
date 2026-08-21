@@ -1,4 +1,4 @@
-const { consumer, producer, connectProducer } = require('../../config/kafka');
+const { consumer, producer, connectProducer, KAFKA_ENABLED } = require('../../config/kafka');
 const logger = require('../../config/logger');
 const { KAFKA_TOPICS } = require('../../../../shared/constants/kafka-topics');
 const { withDLQ } = require('../../../../shared/utils/dlqHandler');
@@ -6,6 +6,9 @@ const inventoryService = require('../../services/inventory.service');
 
 class InventoryConsumer {
      async start() {
+          if (!KAFKA_ENABLED) {
+               throw new Error('KAFKA_BROKER not configured — inventory consumer disabled');
+          }
           await consumer.connect();
           await connectProducer(); // needed for DLQ publishing
           logger.info('Inventory consumer connected');

@@ -1,4 +1,4 @@
-const { producer, connectProducer } = require('../../config/kafka');
+const { producer, connectProducer, KAFKA_ENABLED } = require('../../config/kafka');
 const logger = require('../../config/logger');
 const { KAFKA_TOPICS } = require('../../../../shared/constants/kafka-topics');
 
@@ -8,14 +8,18 @@ class NotificationProducer {
      }
 
      async initialize() {
-          if (!this.isInitialized) {
-               await connectProducer();
-               this.isInitialized = true;
-          }
+          if (!KAFKA_ENABLED || this.isInitialized) return;
+          await connectProducer();
+          this.isInitialized = true;
      }
 
 
      async sendMessage(topic, key, value){
+          // If Kafka is not configured, skip silently (don't crash the request)
+          if (!KAFKA_ENABLED) {
+               logger.warn(`Kafka disabled — skipping message to topic: ${topic}`, { key });
+               return null;
+          }
           try{
                await this.initialize();
 

@@ -1,4 +1,4 @@
-const { producer, connectProducer } = require('../../config/kafka');
+const { producer, connectProducer, KAFKA_ENABLED } = require('../../config/kafka');
 const logger = require('../../config/logger');
 const { KAFKA_TOPICS } = require('../../../../shared/constants/kafka-topics');
 
@@ -6,13 +6,16 @@ class AdminProducer {
      constructor() { this.isInitialized = false; }
 
      async initialize() {
-          if (!this.isInitialized) {
-               await connectProducer();
-               this.isInitialized = true;
-          }
+          if (!KAFKA_ENABLED || this.isInitialized) return;
+          await connectProducer();
+          this.isInitialized = true;
      }
 
      async sendMessage(topic, key, value) {
+          if (!KAFKA_ENABLED) {
+               logger.warn(`Kafka disabled — skipping admin event to topic: ${topic}`, { key });
+               return null;
+          }
           try {
                await this.initialize();
                const result = await producer.send({
